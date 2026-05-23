@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+venv/
+env/
+.env/
+.venv/
+
+# Büyük veri dosyaları (git LFS veya harici depo gerektirir)
+*.parquet
+*.pkl
+*.csv
+*.xlsx
+*.txt
+*.zip
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Çıktı klasörleri
+Gunluk_Raporlar/
+BIST_Rally_Analiz_Paketi/
+raw_data/
+
+# Harici veri yolları (config.py'de tanımlı, repo'ya dahil değil)
+# MACRO_EXCEL_PATH ve FUND_PARQUET_PATH dosyaları hariç tutuldu
