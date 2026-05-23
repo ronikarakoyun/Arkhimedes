@@ -7,7 +7,15 @@ Bu dosya dışında HİÇBİR dosya path string'i tanımlamamalı.
 Kullanım:
     from config import DB_PATH, INITIAL_CAPITAL  # vb.
 """
+import os
 from pathlib import Path
+
+# ─── .env Yükle (API anahtarları için) ──────────────────────────────────────
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv yüklü değilse, env değişkenleri OS'tan okunur
 
 # ─── Veri Dosyaları ─────────────────────────────────────────────────────────
 DB_PATH           = "market_db.parquet"
@@ -104,6 +112,22 @@ TRACKING_DB_PATH       = "tracking_db.json"
 TRACKING_REPORT_DIR    = "Gunluk_Raporlar/Tracking"
 TRACKING_TOP_N         = 30    # Takip edilecek üst sıra sayısı
 TRACKING_GHOST_TIMEOUT = 45    # GHOST modunda bu kadar gün sonra ARCHIVED_STALE
+
+# ─── KAP (Kamuyu Aydınlatma Platformu) ──────────────────────────────────────
+KAP_DATA_PATH      = "kap_disclosures.parquet"
+RAW_DATA_DIR       = "raw_data"
+KAP_LOOKBACK_30    = 30
+KAP_LOOKBACK_90    = 90
+KAP_ANOMALY_Z_THR  = 2.0       # Anomaly Z-skor eşiği
+
+# ─── API Kimlik Bilgileri (.env'den okunur) ──────────────────────────────────
+# MKK VYK (KAP duyuruları)
+MKK_API_KEY    = os.getenv("MKK_API_KEY", "")
+MKK_API_SECRET = os.getenv("MKK_API_SECRET", "")
+MKK_BASE_URL   = "https://apigwdev.mkk.com.tr/api/vyk"
+
+# EVDS (TCMB makro veri)
+EVDS_API_KEY   = os.getenv("EVDS_API_KEY", "")
 # NOT: 5 çok büyüktü — fundamental veri 2016-17'den başladığı için hiç fold
 # üretilmiyordu (cv_auc=N/A → tüm epoch'lar DROP). 3 yıllık pencereyle epoch
 # 6'dan itibaren geçerli fold alınabiliyor.

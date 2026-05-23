@@ -15,6 +15,14 @@ env/
 .env/
 .venv/
 
+# API kimlik bilgileri (fetcher'lar için)
+.env
+.env.local
+
+# KAP arşiv klasörleri (fetcher çıktıları)
+bist_10_yillik_arsiv/
+bist_yabanci_arşiv/
+
 # Büyük veri dosyaları (git LFS veya harici depo gerektirir)
 *.parquet
 *.pkl

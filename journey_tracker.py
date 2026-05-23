@@ -325,9 +325,10 @@ def generate_report(db: dict, stats: dict, report_dir: str = TRACKING_REPORT_DIR
             rs_str = f"RS:{rs:+.2f}" if rs is not None else "RS:N/A"
             cr_str = f"Kümülatif:{cr:+.1f}%" if cr is not None else ""
             p = j.get('detection_price')
+            d_date = j.get('detection_date', '—')
             price_str = f"₺{p:.2f}" if p else ""
             lines.append(
-                f"  {j['ticker']:<8} Gün:{len(j['daily_logs']):<4} {rank_str:<10} {rs_str:<14} {cr_str:<18} Tespit:{price_str}"
+                f"  {j['ticker']:<8} Gün:{len(j['daily_logs']):<4} {rank_str:<10} {rs_str:<14} {cr_str:<18} Giriş:{d_date} ({price_str})"
             )
         lines.append("")
 
@@ -342,9 +343,10 @@ def generate_report(db: dict, stats: dict, report_dir: str = TRACKING_REPORT_DIR
             cr = j['daily_logs'][-1].get('cum_return_pct') if j['daily_logs'] else None
             cr_str = f"Kümülatif:{cr:+.1f}%" if cr is not None else ""
             p = j.get('detection_price')
+            d_date = j.get('detection_date', '—')
             price_str = f"₺{p:.2f}" if p else ""
             lines.append(
-                f"  {j['ticker']:<8} Gün:{len(j['daily_logs']):<4} Hayalet:{gd}gün  Kalan:{kalan}gün  {cr_str:<18} Tespit:{price_str}"
+                f"  {j['ticker']:<8} Gün:{len(j['daily_logs']):<4} Hayalet:{gd}gün  Kalan:{kalan}gün  {cr_str:<18} Giriş:{d_date} ({price_str})"
             )
         lines.append("")
 
