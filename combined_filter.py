@@ -50,7 +50,7 @@ LGB_RANK_PARAMS = dict(
     bagging_freq=5,
     verbosity=-1,
     random_state=42,
-    num_threads=1,
+    num_threads=-1,
 )
 
 
@@ -68,15 +68,14 @@ def _compute_relevance_labels(df: pd.DataFrame, gain_col: str,
         if len(idx) < 5:
             continue
         pos = df.index.get_indexer(idx)  # 0-tabanlı pozisyonlar
-        gains_series = df.loc[idx, gain_col]  # Series — pd.qcut Series döndürür
-        try:
-            bins = pd.qcut(gains_series, q=[0, .10, .30, .70, .90, 1.0],
-                           labels=[0, 1, 2, 3, 4], duplicates='drop')
-            # bins: Categorical Series — .fillna(2) → int ile NaN'ları nötr yap
-            arr = bins.cat.codes.replace(-1, 2).values.astype(np.int32)
-        except Exception:
-            continue
-        labels[pos] = arr
+        gains = df.loc[idx, gain_col].values
+        # rank(pct=True) → sabit 5 sınıf, yığılmadan etkilenmez
+        pct = pd.Series(gains).rank(pct=True, method='average').values
+        rel = np.where(pct <= 0.10, 0,
+              np.where(pct <= 0.30, 1,
+              np.where(pct <= 0.70, 2,
+              np.where(pct <= 0.90, 3, 4)))).astype(np.int32)
+        labels[pos] = rel
     return labels
 
 
@@ -84,25 +83,6 @@ def _get_group_array(sorted_group_col: pd.Series) -> np.ndarray:
     """Ardışık grup boyutları dizisi (LightGBM group parametresi için)."""
     return sorted_group_col.value_counts(sort=False).reindex(
         sorted_group_col.unique()).fillna(0).values.astype(np.int32)
-
-
-def _compute_mean_ndcg(relevance: np.ndarray, scores: np.ndarray,
-                        group_ids: np.ndarray, k: int = 10) -> 'float | None':
-    """Her grup için NDCG@k hesapla, ortalamasını döndür."""
-    from sklearn.metrics import ndcg_score
-    groups = np.unique(group_ids)
-    ndcgs = []
-    for g in groups:
-        mask = group_ids == g
-        if mask.sum() < 2:
-            continue
-        n = min(k, int(mask.sum()))
-        try:
-            ndcgs.append(ndcg_score(relevance[mask].reshape(1, -1),
-                                    scores[mask].reshape(1, -1), k=n))
-        except Exception:
-            pass
-    return float(np.mean(ndcgs)) if ndcgs else None
 
 
 def _rolling_walk_forward_cv_ndcg(X: pd.DataFrame, relevance: np.ndarray,
@@ -126,7 +106,7 @@ def _rolling_walk_forward_cv_ndcg(X: pd.DataFrame, relevance: np.ndarray,
             continue
         rel_train = relevance[train_m]
         rel_test = relevance[test_m]
-        if len(np.unique(rel_train)) < 2:
+        if len(np.unique(rel_train)) < 2 or len(np.unique(rel_test)) < 2:
             continue
 
         gc_train = group_col.values[train_m]
@@ -154,10 +134,10 @@ def _rolling_walk_forward_cv_ndcg(X: pd.DataFrame, relevance: np.ndarray,
             m.fit(Xtr, ytr, group=g_tr,
                   eval_set=[(Xte, yte)], eval_group=[g_te],
                   callbacks=[lgb.early_stopping(30, verbose=False)])
-            scores = m.predict(Xte)
-            ndcg = _compute_mean_ndcg(yte, scores, gc_te_sorted, k=k)
+            # LightGBM C++ çekirdeğinde hesapladığı NDCG'yi doğrudan oku
+            ndcg = m.best_score_.get('valid_0', {}).get('ndcg@10')
             if ndcg is not None:
-                ndcgs.append(ndcg)
+                ndcgs.append(float(ndcg))
         except Exception:
             pass
 

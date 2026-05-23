@@ -87,6 +87,12 @@ FINAL_P_THRESHOLD        = 0.0       # RankScore veto DEVRE DIŞI: LambdaRank sk
                                      # olabilir; _thr > 0 kontrolüyle veto aktif hale alınır.
                                      # 0.0 seçildi → veto yok (simulate_trading'de _thr>0 koşulu var).
 COMBINED_CV_WINDOW_YEARS = 3         # Rolling walk-forward train penceresi
+
+# ─── Seyir Defteri (Journey Tracker) ────────────────────────────────────────
+TRACKING_DB_PATH       = "tracking_db.json"
+TRACKING_REPORT_DIR    = "Gunluk_Raporlar/Tracking"
+TRACKING_TOP_N         = 30    # Takip edilecek üst sıra sayısı
+TRACKING_GHOST_TIMEOUT = 45    # GHOST modunda bu kadar gün sonra ARCHIVED_STALE
 # NOT: 5 çok büyüktü — fundamental veri 2016-17'den başladığı için hiç fold
 # üretilmiyordu (cv_auc=N/A → tüm epoch'lar DROP). 3 yıllık pencereyle epoch
 # 6'dan itibaren geçerli fold alınabiliyor.

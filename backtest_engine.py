@@ -105,9 +105,11 @@ def _train_combined_filter(train_df, macro_df, fund_df, verbose=True):
     labs['Date'] = pd.to_datetime(labs['Date'])
     labs['YearMonth'] = labs['Date'].dt.to_period('M').astype(str)
 
-    # 2. Deduplikasyon: (Ticker, YearMonth) başına tek gözlem — son tarih
-    labs = (labs.sort_values(['Ticker', 'Date'])
-               .drop_duplicates(['Ticker', 'YearMonth'], keep='last')
+    # 2. Deduplikasyon: (Ticker, YearMonth) başına rastgele 1 gözlem
+    # keep='last' ay sonu sapması yaratır; max(cv_compression) look-ahead bias içerir.
+    # Rastgele örnekleme model'e homojen piyasa rejimi öğretir.
+    labs = (labs.groupby(['Ticker', 'YearMonth'], group_keys=False)
+               .sample(n=1, random_state=42)
                .reset_index(drop=True))
 
     if len(labs) < 200:
@@ -128,7 +130,12 @@ def _train_combined_filter(train_df, macro_df, fund_df, verbose=True):
     # Teknik feature'lar labs'da zaten mevcut (train_df = features_db verileri)
     tech_keep = [c for c in TECH_FEATURES if c in labs.columns]
 
-    labs = labs.dropna(subset=m_cols, how='any').reset_index(drop=True)
+    # EVDS kesintisine karşı dayanıklılık: dropna yerine ffill + medyan fallback
+    labs = labs.sort_values('Date')
+    for col in m_cols:
+        labs[col] = labs[col].ffill()
+        if labs[col].isna().any():
+            labs[col] = labs[col].fillna(labs[col].median())
     if len(labs) < 200:
         if verbose:
             print(f"   ⚠️ LambdaRankFilter: makro join sonrası yetersiz veri ({len(labs)} satır)")

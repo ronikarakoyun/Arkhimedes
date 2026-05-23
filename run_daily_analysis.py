@@ -36,7 +36,7 @@ from config import (
 )
 
 
-def run_screener_and_dashboard(target_date_str=None):
+def run_screener_and_dashboard(target_date_str=None, return_df=False):
     print("🚀 Arkhimedes — Günlük Tarama Motoru Başlıyor...")
     os.makedirs(REPORT_DIR, exist_ok=True)
 
@@ -241,6 +241,9 @@ def run_screener_and_dashboard(target_date_str=None):
     print(f"   📄 {txt_path}")
     print(f"   📊 {xlsx_path}")
     print(f"   Toplam {len(final_df)} aday — sıralama: {sort_col}")
+
+    if return_df:
+        return final_df
 
 
 if __name__ == "__main__":
