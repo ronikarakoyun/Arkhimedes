@@ -88,6 +88,17 @@ FINAL_P_THRESHOLD        = 0.0       # RankScore veto DEVRE DIŞI: LambdaRank sk
                                      # 0.0 seçildi → veto yok (simulate_trading'de _thr>0 koşulu var).
 COMBINED_CV_WINDOW_YEARS = 3         # Rolling walk-forward train penceresi
 
+# ─── GMM Sabit Küme Sayısı (Hata 1) ─────────────────────────────────────────
+# Her eğitimde her zaman 5 küme (G0-G4) — BIC araması kapatıldı.
+# journey_tracker'ın retrain'ler arası tutarlılığı için zorunlu.
+GMM_N_COMPONENTS      = 5
+
+# ─── LambdaRank Eğitim Cutoff'u (Hata 2 — ikili cutoff mimarisi) ───────────
+# GMM/success_pd/win_rates için RALLY_WINDOW_DAYS=252 (tam etiket) KORUNUR.
+# Sadece LambdaRank için kısaltılmış cutoff: retrain_date - TRAINING_LABEL_WINDOW.
+# Bu sayede son 1 yıllık piyasa rejimi LambdaRank'a girer.
+TRAINING_LABEL_WINDOW = 90
+
 # ─── Seyir Defteri (Journey Tracker) ────────────────────────────────────────
 TRACKING_DB_PATH       = "tracking_db.json"
 TRACKING_REPORT_DIR    = "Gunluk_Raporlar/Tracking"

@@ -66,7 +66,8 @@ from config import (FINAL_P_THRESHOLD,
                     CLUSTER_METHOD as _CFG_CLUSTER_METHOD,
                     HDBSCAN_MIN_CLUSTER_SIZE, HDBSCAN_MIN_SAMPLES,
                     COMBINED_CV_WINDOW_YEARS,
-                    ENV_FILTER_NDCG_THRESHOLD)
+                    ENV_FILTER_NDCG_THRESHOLD,
+                    GMM_N_COMPONENTS, TRAINING_LABEL_WINDOW)
 from combined_filter import _compute_relevance_labels
 
 # Clustering yöntemi — env değişkeni config'i override eder (head-to-head için)
@@ -182,22 +183,25 @@ def _assign_clusters(model_bundle, X):
 
 def train_at_date(df_feat_pd, retrain_date, verbose=True, macro_df=None, fund_df=None):
     """
-    retrain_date - 252 gün cutoff ile clustering fit (K-Means ya da HDBSCAN).
-    Cluster win-rate'leri de hesapla (training set üzerinde geçiş tabanlı).
+    İkili cutoff mimarisi:
+      - GMM/success_pd/win_rates : retrain_date - RALLY_WINDOW_DAYS (252, tam etiket)
+      - LambdaRank               : retrain_date - TRAINING_LABEL_WINDOW (90, son rejim dahil)
 
     Returns: dict — cluster_method, clusterer, scaler, q_low, q_high, weight_vec,
              win_rates, best_k, twin pools, combined_filter
     """
-    training_cutoff = retrain_date - pd.Timedelta(days=RALLY_WINDOW_DAYS)
+    label_cutoff      = retrain_date - pd.Timedelta(days=RALLY_WINDOW_DAYS)
+    lambdarank_cutoff = retrain_date - pd.Timedelta(days=TRAINING_LABEL_WINDOW)
 
-    # Training setups: tarih ≤ cutoff (labels tam)
-    train_df = df_feat_pd[df_feat_pd['Date'] <= training_cutoff].copy()
+    # Training setups: tarih ≤ label_cutoff (etiketler tam — GMM/success/win_rates için)
+    train_df = df_feat_pd[df_feat_pd['Date'] <= label_cutoff].copy()
     train_df = train_df[train_df['mom_120'] < 0.70]
     train_df = train_df[train_df['mom_120'].notna()]
     train_df = train_df[train_df['future_max_gain'].notna()]
 
     if verbose:
-        print(f"   Training cutoff: {training_cutoff.date()}, {len(train_df):,} setup")
+        print(f"   Label cutoff (GMM/win_rates): {label_cutoff.date()}, {len(train_df):,} setup")
+        print(f"   LambdaRank cutoff: {lambdarank_cutoff.date()} (son {RALLY_WINDOW_DAYS - TRAINING_LABEL_WINDOW} gün dahil)")
 
     # Başarı havuzu: future_max_gain >= 1.0
     success_pd = train_df[train_df['future_max_gain'] >= RALLY_GAIN_THRESHOLD].copy()
@@ -243,17 +247,10 @@ def train_at_date(df_feat_pd, retrain_date, verbose=True, macro_df=None, fund_df
         best_k = len(valid_labels)
         best_score = float('nan')
     elif cluster_method == "gmm":
+        # Sabit küme sayısı (Hata 1 düzeltmesi) — BIC araması KAPALI.
+        # journey_tracker'ın retrain'ler arası tutarlılığı için zorunlu.
         from sklearn.mixture import GaussianMixture
-        sample_size = min(5000, len(X))
-        rng = np.random.default_rng(42)
-        X_samp = X[rng.choice(X.shape[0], sample_size, replace=False)]
-        best_k, best_bic = 3, float('inf')
-        for k in range(3, 7):
-            gm = GaussianMixture(n_components=k, covariance_type='full',
-                                 max_iter=200, random_state=42).fit(X_samp)
-            bic = gm.bic(X_samp)
-            if bic < best_bic:
-                best_bic, best_k = bic, k
+        best_k = GMM_N_COMPONENTS
         clusterer = GaussianMixture(n_components=best_k, covariance_type='full',
                                     max_iter=200, random_state=42).fit(X)
         best_score = float('nan')
@@ -321,10 +318,16 @@ def train_at_date(df_feat_pd, retrain_date, verbose=True, macro_df=None, fund_df
     twin_pool_failure = failure_pd[['Ticker', 'Date']].copy() if len(failure_pd) > 0 else pd.DataFrame(columns=['Ticker','Date'])
 
     # CombinedFilter (macro+fundamental+technical → RankScore)
+    # Hata 2 düzeltmesi: LambdaRank kendi cutoff'unu (90 gün) kullanır → son rejim dahil.
+    # mom_120 < 0.70 filtresi KORUNUR (mevcut davranış değişmez — Hata 5 düzeltmesi).
     combined_filter = None
     if macro_df is not None and fund_df is not None:
+        train_df_lambdarank = df_feat_pd[df_feat_pd['Date'] <= lambdarank_cutoff].copy()
+        train_df_lambdarank = train_df_lambdarank[train_df_lambdarank['mom_120'] < 0.70]
+        train_df_lambdarank = train_df_lambdarank[train_df_lambdarank['mom_120'].notna()]
+        train_df_lambdarank = train_df_lambdarank[train_df_lambdarank['future_max_gain'].notna()]
         combined_filter = _train_combined_filter(
-            train_df, macro_df, fund_df, verbose=verbose
+            train_df_lambdarank, macro_df, fund_df, verbose=verbose
         )
 
     return {

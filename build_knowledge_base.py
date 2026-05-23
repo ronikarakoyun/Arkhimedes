@@ -47,6 +47,7 @@ from config import (
     FAILURE_POOL_PATH,
     TRANSITIONS_PATH,
     SETUPS_PATH,
+    TRAINING_LABEL_WINDOW,
 )
 
 print("=" * 70)
@@ -67,17 +68,19 @@ df_outcomes = compute_forward_relative_gain(df_feat, RALLY_WINDOW_DAYS)
 df_pd = df_outcomes.to_pandas()
 df_pd["Date"] = pd.to_datetime(df_pd["Date"])
 
-# ─── 3. Eğitim Tarihi: Tüm Veriyi Kapsayacak Şekilde Ayarla ─────────────────
-# train_at_date: training_cutoff = retrain_date - RALLY_WINDOW_DAYS
-# Tüm etiketsiz veriyi hariç tutup etiketli tüm veriyi dahil etmek için:
-# retrain_date = latest_date + RALLY_WINDOW_DAYS + 1 gün
+# ─── 3. Eğitim Tarihi: İkili Cutoff Mimarisi ────────────────────────────────
+# train_at_date içinde iki cutoff:
+#   - label_cutoff      = retrain_date - RALLY_WINDOW_DAYS   (GMM/success/win_rates)
+#   - lambdarank_cutoff = retrain_date - TRAINING_LABEL_WINDOW (LambdaRank)
+# Production build'de retrain_date'i latest+253 ileri kurarak HER İKİ cutoff'un
+# da latest_date'i aşmasını sağlıyoruz → tüm veri eğitime girer.
 latest_date = df_pd["Date"].max()
 retrain_date = latest_date + pd.Timedelta(days=RALLY_WINDOW_DAYS + 1)
 print(f"\n🎯 Eğitim konfigürasyonu:")
-print(f"   Son veri tarihi   : {latest_date.date()}")
-print(f"   Retrain tarihi    : {retrain_date.date()}")
-print(f"   Training cutoff   : {(retrain_date - pd.Timedelta(days=RALLY_WINDOW_DAYS)).date()}")
-print(f"   (Tüm etiketli veri dahil, son {RALLY_WINDOW_DAYS} gün eğitimsiz — look-ahead yok)")
+print(f"   Son veri tarihi          : {latest_date.date()}")
+print(f"   Retrain tarihi           : {retrain_date.date()}")
+print(f"   GMM/win_rates cutoff     : {(retrain_date - pd.Timedelta(days=RALLY_WINDOW_DAYS)).date()}  (tam etiketli)")
+print(f"   LambdaRank cutoff        : {(retrain_date - pd.Timedelta(days=TRAINING_LABEL_WINDOW)).date()}  (son {RALLY_WINDOW_DAYS - TRAINING_LABEL_WINDOW} gün dahil, kısmi etiket OK)")
 
 # ─── 4. Makro + Fundamental Yükle ────────────────────────────────────────────
 print("\n📊 Makro ve fundamental veriler yükleniyor...")
@@ -120,18 +123,23 @@ cluster_info = {}
 cluster_map  = {}
 method_tag   = cluster_method[0].upper()  # G for GMM, K for KMeans, H for HDBSCAN
 
-for c in sorted(win_rates.keys()):
-    tc = transitions[transitions["Cluster"] == c]
+# Hata 3 düzeltmesi — Win-rate sıralı kararlı etiketleme:
+# GMM iç ID'leri rastgele atanır → "G2" bir eğitimde en iyi, başkasında en kötü olabilir.
+# Çözüm: win-rate'e göre sırala, G0 = en iyi, G1 = ikinci, ... → semantik kararlı.
+sorted_by_wr = sorted(win_rates.items(), key=lambda x: x[1], reverse=True)
+
+for rank, (orig_c, wr) in enumerate(sorted_by_wr):
+    tc = transitions[transitions["Cluster"] == orig_c]
     n_trans   = len(tc)
     n_success = int((tc["future_max_gain"] >= RALLY_GAIN_THRESHOLD).sum())
     n_fail    = int((tc["future_max_gain"] < FAILURE_GAIN_CEILING).sum())
-    orig_count = int((pd_success["Cluster"] == c).sum()) if "Cluster" in pd_success.columns else 0
-    wr        = win_rates[c]
+    orig_count = int((pd_success["Cluster"] == orig_c).sum()) if "Cluster" in pd_success.columns else 0
 
     alert = " 🌟" if wr >= 0.65 else (" ⚠️" if wr <= 0.35 else "")
-    name  = f"{method_tag}{c} — %{wr*100:.0f} WinRate{alert}"
+    # Mevcut isim formatı KORUNUR (win-rate% + alert emoji) — sadece sıra rank'tan gelir.
+    name  = f"{method_tag}{rank} — %{wr*100:.0f} WinRate{alert}"
 
-    cluster_info[c] = {
+    cluster_info[orig_c] = {
         "name":               name,
         "win_rate":           wr,
         "original_size":      orig_count,
@@ -140,7 +148,7 @@ for c in sorted(win_rates.keys()):
         "transition_failure": n_fail,
         "signature":          {},   # GMM'de centroid-tabanlı etiketleme yok
     }
-    cluster_map[c] = name
+    cluster_map[orig_c] = name
 
     print(f"   {name:<45}  eğitim={orig_count:>5,}  geçiş={n_trans:>5,}")
 

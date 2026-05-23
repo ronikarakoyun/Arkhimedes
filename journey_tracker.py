@@ -161,9 +161,13 @@ def update_tracking_engine(
         ticker = journey['ticker']
         prev_status = journey['status']
         day_n = len(journey['daily_logs']) + 1
-        detection_price = journey.get('detection_price') or 1.0
+        # Hata 9 düzeltmesi — detection_price None ise saçma getiri üretme:
+        detection_price = journey.get('detection_price')
         current_price = current_market_prices.get(ticker)
-        cum_return = round(((current_price / detection_price) - 1) * 100, 2) if current_price else None
+        if detection_price and current_price:
+            cum_return = round(((current_price / detection_price) - 1) * 100, 2)
+        else:
+            cum_return = None
 
         if ticker in today_tickers:
             # → ACTIVE
@@ -215,9 +219,10 @@ def update_tracking_engine(
             })
 
     # ── ADIM 3: Yeni HOOK — bugünkü top_n'de ACTIVE/GHOST olmayan ticker'lar ──
-    for jid, journey in db['active_journeys'].items():
-        if journey['status'] in ('ACTIVE', 'GHOST'):
-            active_tickers.add(journey['ticker'])
+    # Hata 8 düzeltmesi — active_tickers'i GC sonrası SIFIRDAN inşa et.
+    # Aksi halde bugün arşivlenen hisse hâlâ "aktif" sanılır, yeni cycle (AAA_2) açılamaz.
+    active_tickers = {j['ticker'] for j in db['active_journeys'].values()
+                      if j['status'] in ('ACTIVE', 'GHOST')}
 
     for _, row in top_df.iterrows():
         ticker = row['Ticker']
