@@ -47,6 +47,10 @@ Thumbs.db
 Gunluk_Raporlar/
 BIST_Rally_Analiz_Paketi/
 raw_data/
+logs/
+
+# Kullanıcı verisi (lokal state)
+tracking_db.json
 
 # Harici veri yolları (config.py'de tanımlı, repo'ya dahil değil)
 # MACRO_EXCEL_PATH ve FUND_PARQUET_PATH dosyaları hariç tutuldu

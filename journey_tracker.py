@@ -28,6 +28,15 @@ from config import (
     TRACKING_TOP_N, TRACKING_GHOST_TIMEOUT,
 )
 
+# KAP entegrasyonu — opsiyonel (kap_engine import başarısız olursa sessizce geçer)
+try:
+    from kap_engine import kap_summary_str as _kap_summary_str
+    _KAP_AVAILABLE = True
+except ImportError:
+    _KAP_AVAILABLE = False
+    def _kap_summary_str(*args, **kwargs):
+        return ""
+
 
 # ─── DB I/O ─────────────────────────────────────────────────────────────────
 
@@ -97,6 +106,7 @@ def update_tracking_engine(
     current_date,
     top_n: int = TRACKING_TOP_N,
     db_path: str = TRACKING_DB_PATH,
+    kap_df=None,
 ) -> dict:
     """
     Günlük durum makinesi güncelleme motoru.
@@ -109,6 +119,7 @@ def update_tracking_engine(
     current_date         : str veya datetime — o günün tarihi
     top_n                : Kaç hisseyi takip et (varsayılan TRACKING_TOP_N=30)
     db_path              : tracking_db.json dosya yolu
+    kap_df               : load_kap_data() çıktısı (opsiyonel) — None ise KAP özeti atlanır
 
     Döndürür
     --------
@@ -184,7 +195,8 @@ def update_tracking_engine(
             note = f"{rank}. sıraya {'tırmandı' if action=='CLIMBING' else 'geriledi' if action=='SLIDING' else 'tutunuyor'}."
 
             row = top_df[top_df['Ticker'] == ticker].iloc[0]
-            journey['daily_logs'].append({
+            kap_note = _kap_summary_str(ticker, current_date_str, kap_df) if (kap_df is not None and _KAP_AVAILABLE) else ""
+            log_entry = {
                 'day': day_n,
                 'date': current_date_str,
                 'list_rank': rank,
@@ -192,7 +204,10 @@ def update_tracking_engine(
                 'cum_return_pct': cum_return,
                 'action': action,
                 'note': note,
-            })
+            }
+            if kap_note:
+                log_entry['kap_summary'] = kap_note
+            journey['daily_logs'].append(log_entry)
 
         else:
             # → GHOST
@@ -245,6 +260,18 @@ def update_tracking_engine(
             history_note = f' [Geçmiş Op. Bulundu: Cycle {max(j["cycle_id"] for j in past_cycles)}]'
 
         rank = _get_list_rank(top_df, ticker)
+        kap_note = _kap_summary_str(ticker, current_date_str, kap_df) if (kap_df is not None and _KAP_AVAILABLE) else ""
+        initial_log = {
+            'day': 1,
+            'date': current_date_str,
+            'list_rank': rank,
+            'rankscore': rankscore,
+            'cum_return_pct': 0.0,
+            'action': 'INITIAL_DETECTION',
+            'note': f"{row.get('Karakter', '?')} kümesinden radara girdi.{history_note}",
+        }
+        if kap_note:
+            initial_log['kap_summary'] = kap_note
         db['active_journeys'][journey_id] = {
             'journey_id': journey_id,
             'ticker': ticker,
@@ -256,15 +283,7 @@ def update_tracking_engine(
             'detection_cluster_name': str(row.get('Karakter', '')),
             'detection_rankscore': rankscore,
             'ghost_since': None,
-            'daily_logs': [{
-                'day': 1,
-                'date': current_date_str,
-                'list_rank': rank,
-                'rankscore': rankscore,
-                'cum_return_pct': 0.0,
-                'action': 'INITIAL_DETECTION',
-                'note': f"{row.get('Karakter', '?')} kümesinden radara girdi.{history_note}",
-            }],
+            'daily_logs': [initial_log],
         }
         stats['n_new'] += 1
         stats['new_entries'].append({'ticker': ticker, 'journey_id': journey_id,
@@ -330,6 +349,9 @@ def generate_report(db: dict, stats: dict, report_dir: str = TRACKING_REPORT_DIR
             lines.append(
                 f"  {j['ticker']:<8} Gün:{len(j['daily_logs']):<4} {rank_str:<10} {rs_str:<14} {cr_str:<18} Giriş:{d_date} ({price_str})"
             )
+            kap = last.get('kap_summary', '')
+            if kap:
+                lines.append(f"          {kap}")
         lines.append("")
 
     # Hayalet hisseler

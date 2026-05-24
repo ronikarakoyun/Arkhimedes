@@ -124,9 +124,10 @@ def run_screener_and_dashboard(target_date_str=None, return_df=False):
     latest_features = (
         df_feat
         .filter(pl.col("Ticker").is_in(surviving_tickers))
-        .sort(["Ticker", "Date"])
-        .group_by("Ticker").last()
         .to_pandas()
+        .sort_values(["Ticker", "Date"])
+        .groupby("Ticker").last()
+        .reset_index()
         .dropna(subset=FEATURES_FOR_CLUSTERING)
     )
 

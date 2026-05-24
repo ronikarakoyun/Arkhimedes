@@ -54,7 +54,7 @@ fetch-kap-inc:
 	$(PY) $(FETCHERS)/fetch_kap_archive.py --incremental
 
 fetch-kap-full:
-	$(PY) $(FETCHERS)/fetch_kap_archive.py --full
+	$(PY) $(FETCHERS)/fetch_kap_archive.py --full --workers 4
 
 fetch-fund:
 	$(PY) $(FETCHERS)/fetch_bist_fundamentals.py --full

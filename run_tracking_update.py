@@ -14,9 +14,16 @@ import pandas as pd
 
 warnings.filterwarnings('ignore')
 
-from config import DB_PATH, TRACKING_DB_PATH, TRACKING_REPORT_DIR, TRACKING_TOP_N
+from config import DB_PATH, TRACKING_DB_PATH, TRACKING_REPORT_DIR, TRACKING_TOP_N, KAP_DATA_PATH
 from run_daily_analysis import run_screener_and_dashboard
 from journey_tracker import update_tracking_engine, generate_report, load_tracking_db
+
+# KAP verisi — opsiyonel; yoksa sessizce geçer
+try:
+    from kap_engine import load_kap_data
+    _KAP_ENGINE_AVAILABLE = True
+except ImportError:
+    _KAP_ENGINE_AVAILABLE = False
 
 
 def main(date_str=None):
@@ -52,6 +59,17 @@ def main(date_str=None):
 
     print(f"✅ {len(final_df)} aday sıralandı. İlk {TRACKING_TOP_N}'i takip edilecek.")
 
+    # ── KAP verisi (opsiyonel) ────────────────────────────────────────────────
+    kap_df = None
+    if _KAP_ENGINE_AVAILABLE:
+        import os
+        if os.path.exists(KAP_DATA_PATH):
+            print(f"\n📰 KAP verisi yükleniyor ({KAP_DATA_PATH})...")
+            kap_df = load_kap_data(KAP_DATA_PATH)
+            print(f"   {len(kap_df):,} duyuru yüklendi.")
+        else:
+            print(f"\n⚠️  KAP arşivi henüz yok ({KAP_DATA_PATH}). KAP özeti atlanıyor.")
+
     # ── State Machine güncelle ────────────────────────────────────────────────
     print(f"\n⚙️  Seyir Defteri güncelleniyor ({TRACKING_DB_PATH})...")
     stats = update_tracking_engine(
@@ -59,6 +77,7 @@ def main(date_str=None):
         current_market_prices=prices,
         current_date=target_date,
         db_path=TRACKING_DB_PATH,
+        kap_df=kap_df,
     )
 
     # ── Rapor üret ve ekrana bas ──────────────────────────────────────────────
